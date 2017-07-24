@@ -63,7 +63,7 @@ export CFLAGS = -std=c++11 -Wall -Wno-unknown-pragmas
 endif
 CFLAGS += -Iinclude $(ADD_CFLAGS) $(PLUGIN_CFLAGS) -I$(DMLC_CORE)/include -I$(RABIT)/include
 #java include path
-export JAVAINCFLAGS = -I${JAVA_HOME}/include -I./java
+export JAVAINCFLAGS = -I$(JAVA_HOME)/include -I./java
 
 ifeq ($(TEST_COVER), 1)
 	CFLAGS += -g -O0 -fprofile-arcs -ftest-coverage
@@ -77,24 +77,27 @@ endif
 
 ifeq ($(UNAME), Windows)
 	XGBOOST_DYLIB = lib/libxgboost.dll
-	JAVAINCFLAGS += -I${JAVA_HOME}/include/win32
+	JAVAINCFLAGS += -I$(JAVA_HOME)/include/win32
+	DLIB_SUFF = dll
 else
 ifeq ($(UNAME), Darwin)
-	XGBOOST_DYLIB = lib/libxgboost.dylib
+	XGBOOST_DYLIB = lib/libxgboost
 	CFLAGS += -fPIC
+	DLIB_SUFF = dylib
 else
-	XGBOOST_DYLIB = lib/libxgboost.so
+	XGBOOST_DYLIB = lib/libxgboost
 	CFLAGS += -fPIC
+	DLIB_SUFF = so
 endif
 endif
 
 ifeq ($(UNAME), Linux)
 	LDFLAGS += -lrt
-	JAVAINCFLAGS += -I${JAVA_HOME}/include/linux
+	JAVAINCFLAGS += -I$(JAVA_HOME)/include/linux
 endif
 
 ifeq ($(UNAME), Darwin)
-	JAVAINCFLAGS += -I${JAVA_HOME}/include/darwin
+	JAVAINCFLAGS += -I$(JAVA_HOME)/include/darwin
 endif
 
 OPENMP_FLAGS =
@@ -131,7 +134,7 @@ $(DMLC_CORE)/libdmlc.a: $(wildcard $(DMLC_CORE)/src/*.cc $(DMLC_CORE)/src/*/*.cc
 $(RABIT)/lib/$(LIB_RABIT): $(wildcard $(RABIT)/src/*.cc)
 	+ cd $(RABIT); $(MAKE) lib/$(LIB_RABIT); cd $(ROOTDIR)
 
-jvm: jvm-packages/lib/libxgboost4j.so
+jvm: jvm-packages/lib/libxgboost4j
 
 SRC = $(wildcard src/*.cc src/*/*.cc)
 ALL_OBJ = $(patsubst src/%.cc, build/%.o, $(SRC)) $(PLUGIN_OBJS)
@@ -171,22 +174,21 @@ amalgamation/xgboost-all0.o: amalgamation/xgboost-all0.cc
 	$(CXX) -c $(CFLAGS) $< -o $@
 
 # Equivalent to lib/libxgboost_all.so
-lib/libxgboost_all.so: $(AMALGA_OBJ) $(LIB_DEP)
+lib/libxgboost_all: $(AMALGA_OBJ) $(LIB_DEP)
 	@mkdir -p $(@D)
-	$(CXX) $(CFLAGS) -shared -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
+	$(CXX) $(CFLAGS) -shared -o $@.$(DLIB_SUFF) $(filter %.o %.a, $^) $(LDFLAGS)
 
 lib/libxgboost.a: $(ALL_DEP)
 	@mkdir -p $(@D)
 	ar crv $@ $(filter %.o, $?)
 
-lib/libxgboost.dll lib/libxgboost.so lib/libxgboost.dylib: $(ALL_DEP)
+lib/libxgboost: $(ALL_DEP)
 	@mkdir -p $(@D)
-	$(CXX) $(CFLAGS) -shared -o $@ $(filter %.o %a,  $^) $(LDFLAGS)
+	$(CXX) $(CFLAGS) -shared -o $@.$(DLIB_SUFF) $(filter %.o %a,  $^) $(LDFLAGS)
 
-jvm-packages/lib/libxgboost4j.so: jvm-packages/xgboost4j/src/native/xgboost4j.cpp $(ALL_DEP)
+jvm-packages/lib/libxgboost4j: jvm-packages/xgboost4j/src/native/xgboost4j.cpp $(ALL_DEP)
 	@mkdir -p $(@D)
-	$(CXX) $(CFLAGS) $(JAVAINCFLAGS) -shared -o $@ $(filter %.cpp %.o %.a, $^) $(LDFLAGS)
-
+	$(CXX) $(CFLAGS) $(JAVAINCFLAGS) -shared -o $@.$(DLIB_SUFF) $(filter %.cpp %.o %.a, $^) $(LDFLAGS)
 
 xgboost: $(CLI_OBJ) $(ALL_DEP)
 	$(CXX) $(CFLAGS) -o $@  $(filter %.o %.a, $^)  $(LDFLAGS)
@@ -228,7 +230,7 @@ doxygen:
 
 # create standalone python tar file.
 pypack: ${XGBOOST_DYLIB}
-	cp ${XGBOOST_DYLIB} python-package/xgboost
+	cp ${XGBOOST_DYLIB}.$(DLIB_SUFF) python-package/xgboost
 	cd python-package; tar cf xgboost.tar xgboost; cd ..
 
 # create pip installation pack for PyPI
